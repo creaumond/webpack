@@ -3885,8 +3885,8 @@ declare class Compilation {
 	chunkTemplate: ChunkTemplate;
 	runtimeTemplate: RuntimeTemplate;
 	moduleTemplates: ModuleTemplates;
-	moduleMemCaches?: Map<Module, WeakTupleMap<any[], any>>;
-	moduleMemCaches2?: Map<Module, WeakTupleMap<any[], any>>;
+	moduleMemCaches?: Map<Module, MemCache>;
+	moduleMemCaches2?: Map<Module, MemCache>;
 	moduleGraph: ModuleGraph;
 	chunkGraph: ChunkGraph;
 	codeGenerationResults?: CodeGenerationResults;
@@ -19922,6 +19922,22 @@ declare interface MaybeMergeableInitFragment<GenerateContext> {
 }
 type MaybePromise<T> = T | Promise<T>;
 type Media = undefined | string;
+type MemCache = {
+	get<K extends TupleElement>(
+		key: K,
+		...rest: TupleElement[]
+	): undefined | MemCacheValue<K>;
+	set<K extends TupleElement>(
+		key: K,
+		...restAndValue: [...TupleElement[], MemCacheValue<K>]
+	): void;
+	provide<V>(...keyAndCompute: [...TupleElement[], () => V]): V;
+} & Omit<WeakTupleMap<TupleElement[], unknown>, "get" | "set" | "provide">;
+type MemCacheKeyValue<K> = K extends { readonly __memCacheValue?: infer V }
+	? V
+	: unknown;
+type MemCacheValue<K> =
+	unknown extends MemCacheKeyValue<K> ? any : MemCacheKeyValue<K>;
 
 /**
  * Options object for in-memory caching.
@@ -21410,9 +21426,7 @@ declare class ModuleGraph {
 	/**
 	 * Sets module mem caches.
 	 */
-	setModuleMemCaches(
-		moduleMemCaches: Map<Module, WeakTupleMap<any[], any>>
-	): void;
+	setModuleMemCaches(moduleMemCaches: Map<Module, MemCache>): void;
 
 	/**
 	 * Dependency cache provide.
@@ -21420,8 +21434,8 @@ declare class ModuleGraph {
 	dependencyCacheProvide<D extends Dependency, ARGS extends TupleElement[], R>(
 		dependency: D,
 		...args: [
-			ARGS,
-			...((moduleGraph: ModuleGraph, dependency: D, ...args: ARGS) => R)[]
+			...ARGS,
+			(moduleGraph: ModuleGraph, dependency: D, ...args: ARGS) => R
 		]
 	): R;
 
@@ -21534,7 +21548,7 @@ declare interface ModuleMemCachesItem {
 	buildInfo: BuildInfo;
 	references?: WeakMap<Dependency, Module>;
 	lazyRequests?: string;
-	memCache: WeakTupleMap<any[], any>;
+	memCache: MemCache;
 }
 declare class ModuleNotFoundError extends WebpackError {
 	/**
@@ -35106,7 +35120,7 @@ declare abstract class WeakTupleMap<K extends TupleElement[], V> {
 	/**
 	 * Stores a value at the node identified by the provided tuple key.
 	 */
-	set(...args: [K, ...V[]]): void;
+	set(...args: [...K, V]): void;
 
 	/**
 	 * Checks whether the exact tuple key has a stored value.
@@ -35122,7 +35136,7 @@ declare abstract class WeakTupleMap<K extends TupleElement[], V> {
 	 * Returns an existing value for the tuple or computes, stores, and returns a
 	 * new one when the tuple is missing.
 	 */
-	provide(...args: [K, ...((...args: K) => V)[]]): V;
+	provide(...args: [...K, (...args: K) => V]): V;
 
 	/**
 	 * Memoizes `compute(thisArg, ...args)` under the tuple key `[compute,
